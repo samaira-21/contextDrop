@@ -5,13 +5,14 @@ import { Document } from "@langchain/core/documents";
 import { generateEmbedding, summariseCode } from "./gemini";
 import { db } from "@/server/db";
 import { Octokit } from "octokit";
+import { githubAccessToken, rethrowGithubApiError } from "./github-token";
 
 const getDefaultBranch = async (
   githubOwner: string,
   githubRepo: string,
   githubToken?: string,
 ) => {
-  const octokit = new Octokit({ auth: githubToken });
+  const octokit = new Octokit({ auth: githubAccessToken(githubToken) });
   const { data } = await octokit.rest.repos.get({
     owner: githubOwner,
     repo: githubRepo,
@@ -60,7 +61,7 @@ const getFileCount = async (
 
 export const checkCredits = async (githubUrl: string, githubToken?: string) => {
   // Find out how many files are in the repo
-  const octokit = new Octokit({ auth: githubToken });
+  const octokit = new Octokit({ auth: githubAccessToken(githubToken) });
   const githubOwner = githubUrl.split("/")[3];
   const githubRepo = githubUrl.split("/")[4];
 
@@ -68,8 +69,12 @@ export const checkCredits = async (githubUrl: string, githubToken?: string) => {
     throw new Error("Invalid github url");
   }
 
-  const fileCount = await getFileCount("", octokit, githubOwner, githubRepo, 0);
-  return fileCount;
+  try {
+    const fileCount = await getFileCount("", octokit, githubOwner, githubRepo, 0);
+    return fileCount;
+  } catch (error) {
+    rethrowGithubApiError(error);
+  }
 };
 
 export const loadGithubRepo = async (
@@ -83,10 +88,11 @@ export const loadGithubRepo = async (
     throw new Error("Invalid github url");
   }
 
-  const branch = await getDefaultBranch(githubOwner, githubRepo, githubToken);
+  const accessToken = githubAccessToken(githubToken);
+  const branch = await getDefaultBranch(githubOwner, githubRepo, accessToken);
 
   const loader = new GithubRepoLoader(githubUrl, {
-    accessToken: githubToken || "",
+    accessToken: accessToken || "",
     branch: branch,
     ignoreFiles: [
       "package-lock.json",
@@ -107,9 +113,14 @@ export const indexGithubRepo = async (
   githubUrl: string,
   githubToken?: string,
 ) => {
-  const docs = await loadGithubRepo(githubUrl, githubToken);
+  let docs;
+  try {
+    docs = await loadGithubRepo(githubUrl, githubToken);
+  } catch (error) {
+    rethrowGithubApiError(error);
+  }
   const allEmbeddings = await generateEmbeddings(docs);
-  await Promise.allSettled(
+  const outcomes = await Promise.allSettled(
     allEmbeddings.map(async (embedding, index) => {
       console.log(`processing ${index} of ${allEmbeddings.length}`);
       if (!embedding) return;
@@ -123,13 +134,16 @@ export const indexGithubRepo = async (
         },
       });
 
-      //   Currently, prisma don't support vector. So run a war sql query for vector
+      const vector = `[${embedding.embedding.join(",")}]`;
       await db.$executeRaw`
       UPDATE "SourceCodeEmbedding"
-      SET "summaryEmbedding" = ${embedding.embedding}::vector
+      SET "summaryEmbedding" = ${vector}::vector
       WHERE "id" = ${sourceCodeEmbedding.id}`;
     }),
   );
+  const failure = outcomes.find((outcome) => outcome.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+  return allEmbeddings.length;
 };
 
 const generateEmbeddings = async (docs: Document[]) => {

@@ -38,8 +38,20 @@ export const projectRouter = createTRPCRouter({
           },
         },
       });
-      await indexGithubRepo(project.id, input.githubUrl, input.githubToken);
-      await pollCommits(project.id);
+      try {
+        await indexGithubRepo(project.id, input.githubUrl, input.githubToken);
+        await pollCommits(project.id);
+      } catch (error) {
+        await ctx.db.sourceCodeEmbedding.deleteMany({
+          where: { projectId: project.id },
+        });
+        await ctx.db.commit.deleteMany({ where: { projectId: project.id } });
+        await ctx.db.userToProject.deleteMany({
+          where: { projectId: project.id },
+        });
+        await ctx.db.project.delete({ where: { id: project.id } });
+        throw error;
+      }
       await ctx.db.user.update({
         where: { id: ctx.user.userId! },
         data: { credits: { decrement: fileCount } },
@@ -59,6 +71,35 @@ export const projectRouter = createTRPCRouter({
       },
     });
   }),
+  reindexProject: protectedProcedure
+    .input(z.object({ projectId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const project = await ctx.db.project.findFirst({
+        where: {
+          id: input.projectId,
+          userToProjects: { some: { userId: ctx.user.userId! } },
+          deletedAt: null,
+        },
+        select: { id: true, githubUrl: true },
+      });
+      if (!project) throw new Error("Project not found");
+
+      await ctx.db.sourceCodeEmbedding.deleteMany({
+        where: { projectId: project.id },
+      });
+      try {
+        const indexedCount = await indexGithubRepo(
+          project.id,
+          project.githubUrl,
+        );
+        return { indexedCount };
+      } catch (error) {
+        await ctx.db.sourceCodeEmbedding.deleteMany({
+          where: { projectId: project.id },
+        });
+        throw error;
+      }
+    }),
   getCommits: protectedProcedure
     .input(
       z.object({
@@ -66,10 +107,16 @@ export const projectRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
-      pollCommits(input.projectId); //updated
-      return await ctx.db.commit.findMany({
+      if (!input.projectId.trim()) return [];
+      const commits = await ctx.db.commit.findMany({
         where: { projectId: input.projectId },
       });
+      if (commits.length === 0) {
+        void pollCommits(input.projectId).catch((error) => {
+          console.error("Failed to poll commits", error);
+        });
+      }
+      return commits;
     }),
   saveAnswer: protectedProcedure
     .input(

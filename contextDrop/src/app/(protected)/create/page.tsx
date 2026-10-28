@@ -49,7 +49,7 @@ const CreatePage = () => {
             reset();
           },
           onError: (error) => {
-            toast.error("Failed to create project");
+            toast.error(error.message || "Failed to create project");
           },
         },
       );

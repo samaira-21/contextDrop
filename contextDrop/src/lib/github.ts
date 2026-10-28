@@ -7,11 +7,12 @@ import axios from "axios";
 import "dotenv/config";
 import { aiSummariseCommit } from "./gemini";
 import pLimit from "p-limit";
+import { githubAccessToken, rethrowGithubApiError } from "./github-token";
 
 const limit = pLimit(10); // Limit to 2 concurrent requests
 
 export const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN,
+  auth: githubAccessToken(),
 });
 
 type Response = {
@@ -29,10 +30,15 @@ export const getCommitHashes = async (
   if (!owner || !repo) {
     throw new Error("Invalid GitHub URL");
   }
-  const { data } = await octokit.rest.repos.listCommits({
-    owner,
-    repo,
-  });
+  let data;
+  try {
+    ({ data } = await octokit.rest.repos.listCommits({
+      owner,
+      repo,
+    }));
+  } catch (error) {
+    rethrowGithubApiError(error);
+  }
 
   const sortedCommits = data.sort(
     (a: any, b: any) =>
@@ -49,7 +55,10 @@ export const getCommitHashes = async (
 };
 
 export const pollCommits = async (projectId: string) => {
-  const { project, githubUrl } = await fetchProjectGithubUrl(projectId);
+  if (!projectId.trim()) return { count: 0 };
+  const project = await fetchProjectGithubUrl(projectId);
+  if (!project) return { count: 0 };
+  const { githubUrl } = project;
   const commitHashes = await getCommitHashes(githubUrl);
   const unprocessedCommits = await (
     await filterUnprocessedCommits(projectId, commitHashes)
@@ -100,9 +109,11 @@ export const pollCommits = async (projectId: string) => {
 
 async function summariseCommit(githubUrl: string, commitHash: string) {
   // Get the diff, and pass the diff into AI
+  const token = githubAccessToken();
   const { data } = await axios.get(`${githubUrl}/commit/${commitHash}.diff`, {
     headers: {
       Accept: "application/vnd.github.v3.diff",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
   return (await aiSummariseCommit(data)) || "";
@@ -114,9 +125,9 @@ async function fetchProjectGithubUrl(projectId: string) {
     select: { githubUrl: true },
   });
   if (!project?.githubUrl) {
-    throw new Error("Project has no GitHub URL");
+    return null;
   }
-  return { project, githubUrl: project?.githubUrl };
+  return { project, githubUrl: project.githubUrl };
 }
 
 async function filterUnprocessedCommits(

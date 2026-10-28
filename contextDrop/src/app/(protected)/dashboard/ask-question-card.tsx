@@ -13,7 +13,6 @@ import useProject from "@/hooks/use-project";
 import Image from "next/image";
 import React from "react";
 import { askQuestion } from "./actions";
-import { readStreamableValue } from "ai/rsc";
 import CodeReferences from "./code-references";
 import { api } from "@/trpc/react";
 import { toast } from "sonner";
@@ -29,25 +28,31 @@ const AskQuestionCard = () => {
     { fileName: string; sourceCode: string; summary: string }[]
   >([]);
   const [answer, setAnswer] = React.useState("");
+  const [answerError, setAnswerError] = React.useState<string | null>(null);
   const saveAnswer = api.project.saveAnswer.useMutation();
 
   const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     setAnswer("");
+    setAnswerError(null);
     setFilesReferences([]);
     e.preventDefault();
     if (!project?.id) return;
     setLoading(true);
-
-    const { output, filesReferences } = await askQuestion(question, project.id);
     setOpen(true);
-    setFilesReferences(filesReferences);
 
-    for await (const delta of readStreamableValue(output)) {
-      if (delta) {
-        setAnswer((ans) => ans + delta);
+    try {
+      const { answer, filesReferences } = await askQuestion(question, project.id);
+      setFilesReferences(filesReferences);
+      setAnswer(answer);
+      if (!answer.trim()) {
+        setAnswerError("No answer was returned. Check the server logs and try again.");
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      setAnswerError(`I couldn't generate an answer (${message}). Please retry.`);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
   const refetch = useRefetch();
 
@@ -61,7 +66,7 @@ const AskQuestionCard = () => {
                 <Image src="/logo.png" alt="dionysus" width={40} height={40} />
               </DialogTitle>
               <Button
-                disabled={saveAnswer.isPending}
+                disabled={saveAnswer.isPending || loading || !answer.trim()}
                 variant={"outline"}
                 onClick={() => {
                   saveAnswer.mutate(
@@ -89,29 +94,42 @@ const AskQuestionCard = () => {
             </div>
           </DialogHeader>
 
-          <MDEditor.Markdown
-            source={answer}
+          <div
             className="scrollbar-hide !h-full max-h-[40vh] max-w-[90vw] overflow-scroll rounded-md bg-white p-2 text-black"
-            style={{
-              backgroundColor: "white",
-              color: "black",
-            }}
-            components={{
-              code: ({ children }) => (
-                <code
-                  style={{
-                    backgroundColor: "#015482", // grayish black
-                    color: "white",
-                    padding: "4px 6px",
-                    borderRadius: "4px",
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {children}
-                </code>
-              ),
-            }}
-          />
+            aria-live="polite"
+          >
+            {answerError ? (
+              <p role="alert" className="text-sm text-red-700">
+                {answerError}
+              </p>
+            ) : loading && !answer ? (
+              <p className="text-sm text-gray-600">Generating answer…</p>
+            ) : !answer.trim() ? (
+              <p className="text-sm text-gray-600">
+                No answer is available yet. Please try asking again.
+              </p>
+            ) : (
+              <MDEditor.Markdown
+                source={answer}
+                style={{ backgroundColor: "white", color: "black" }}
+                components={{
+                  code: ({ children }) => (
+                    <code
+                      style={{
+                        backgroundColor: "#015482",
+                        color: "white",
+                        padding: "4px 6px",
+                        borderRadius: "4px",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {children}
+                    </code>
+                  ),
+                }}
+              />
+            )}
+          </div>
           {/* <div className="h-1"></div> */}
 
           <CodeReferences filesReferences={filesReferences} />

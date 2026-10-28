@@ -2,6 +2,14 @@
 
 This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
 
+## Local setup
+
+1. Copy `.env.example` to `.env` and set `DATABASE_URL` plus your Razorpay test keys.
+2. Start PostgreSQL, then run `npm ci` and `npx prisma db push`.
+3. Start the app with `npm run dev`.
+
+The billing flow uses Razorpay Checkout and verifies payments on the server. Configure a Razorpay webhook pointing to `/api/webhook/razorpay`, subscribe to `payment.captured`, and set the webhook secret as `RAZORPAY_WEBHOOK_SECRET`.
+
 ## What's next? How do I make an app with this?
 
 We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
