@@ -6,6 +6,9 @@ import React from "react";
 import CommitLog from "./commit-log";
 import AskQuestionCard from "./ask-question-card";
 import ArchiveButton from "./archive-button";
+import { Button } from "@/components/ui/button";
+import { api } from "@/trpc/react";
+import { toast } from "sonner";
 // import InviteButton from "./invite-button";
 import dynamic from "next/dynamic";
 const InviteButton = dynamic(() => import("./invite-button"), { ssr: false });
@@ -13,6 +16,11 @@ import TeamMembers from "./team-members";
 
 const Dashboardpage = () => {
   const { project } = useProject();
+  const reindexProject = api.project.reindexProject.useMutation({
+    onSuccess: ({ indexedCount }) =>
+      toast.success(`Indexed ${indexedCount} source files.`),
+    onError: (error) => toast.error(error.message),
+  });
   return (
     <div className="w-full max-w-full overflow-x-hidden px-2 sm:px-4">
       <div className="flex flex-wrap items-center justify-between gap-y-4">
@@ -40,6 +48,15 @@ const Dashboardpage = () => {
         <div className="flex flex-wrap items-center gap-2 sm:gap-4">
           <TeamMembers />
           <InviteButton />
+          <Button
+            variant="outline"
+            disabled={!project?.id || reindexProject.isPending}
+            onClick={() =>
+              project?.id && reindexProject.mutate({ projectId: project.id })
+            }
+          >
+            {reindexProject.isPending ? "Indexing…" : "Re-index repository"}
+          </Button>
           <ArchiveButton />
         </div>
       </div>

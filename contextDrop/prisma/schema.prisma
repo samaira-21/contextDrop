@@ -26,7 +26,7 @@ model User {
 
     userToProjects UserToProject[]
     questionsAsked Question[]
-    stripeTransactions StripeTransaction[]
+    razorpayTransactions RazorpayTransaction[]
 }
 
 model Project {
@@ -109,13 +109,16 @@ model Commit {
     summary String
 }
 
-model StripeTransaction {
+model RazorpayTransaction {
     id String @id @default(cuid())
     createdAt DateTime @default(now())
     updatedAt DateTime @updatedAt
 
+    orderId String @unique
+    paymentId String? @unique
     userId String
     user User @relation(fields: [userId], references: [id])
-    
     credits Int
+    amount Int
+    status String @default("created")
 }

@@ -15,9 +15,10 @@ import CodeReferences from "../dashboard/code-references";
 
 const QAPage = () => {
   const { projectId } = useProject();
-  const { data: questions } = api.project.getQuestions.useQuery({
-    projectId,
-  });
+  const { data: questions } = api.project.getQuestions.useQuery(
+    { projectId },
+    { enabled: Boolean(projectId) },
+  );
   const [questionIndex, setQuestionIndex] = React.useState(0);
   const question = questions?.[questionIndex];
 

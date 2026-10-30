@@ -23,7 +23,10 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      signInFallbackRedirectUrl="/sync-user"
+      signUpFallbackRedirectUrl="/sync-user"
+    >
       <html lang="en" className={`${GeistSans.variable}`}>
         <body>
           <TRPCReactProvider>{children}</TRPCReactProvider>

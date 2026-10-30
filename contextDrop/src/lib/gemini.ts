@@ -47,8 +47,15 @@ export const aiSummariseCommit = async (diff: string) => {
 
 export async function summariseCode(doc: Document) {
   console.log("getting summary for ", doc.metadata.source);
+  const fileName = String(doc.metadata.source ?? "unknown file");
+  const code = doc.pageContent.slice(0, 10000).trim();
+  const fallbackSummary = code
+    ? `Source file ${fileName}. Code excerpt: ${code.slice(0, 1800)}`
+    : `Empty source file: ${fileName}`;
+
+  if (!code) return fallbackSummary;
+
   try {
-    const code = doc.pageContent.slice(0, 10000); // Limit t 10000 characters
     const response = await model.generateContent([
       `You are an intelligent senior software engineer who specialises in onboarding junior software engineers onto projects`,
       `You are onboarding a junior software engineer and explaining to them the purpose of the ${doc.metadata.source} file
@@ -59,17 +66,29 @@ export async function summariseCode(doc: Document) {
       Give a summary no more than 100 words of the code aboce`,
     ]);
 
-    return response.response.text();
+    return response.response.text().trim() || fallbackSummary;
   } catch (error) {
-    return "";
+    console.error(`Failed to summarize ${fileName}; using a code excerpt`, error);
+    return fallbackSummary;
   }
 }
 
 export async function generateEmbedding(summary: string) {
+  const content = summary.trim();
+  if (!content) {
+    throw new Error("Cannot create an embedding from empty text.");
+  }
+
   const model = genAI.getGenerativeModel({
-    model: "text-embedding-004",
+    model: "gemini-embedding-001",
   });
-  const result = await model.embedContent(summary);
-  const embedding = result.embedding;
-  return embedding.values;
+  const result = await model.embedContent({
+    content: { role: "user", parts: [{ text: content }] },
+    outputDimensionality: 768,
+  } as Parameters<typeof model.embedContent>[0]);
+  const values = result.embedding.values;
+  if (!values?.length) {
+    throw new Error("Gemini did not return an embedding.");
+  }
+  return values.slice(0, 768);
 }
