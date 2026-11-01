@@ -16,7 +16,7 @@ import { askQuestion } from "./actions";
 import CodeReferences from "./code-references";
 import { api } from "@/trpc/react";
 import { toast } from "sonner";
-import { SaveIcon } from "lucide-react";
+import { LoaderCircle, SaveIcon } from "lucide-react";
 import useRefetch from "@/hooks/use-refetch";
 
 const AskQuestionCard = () => {
@@ -63,7 +63,7 @@ const AskQuestionCard = () => {
           <DialogHeader>
             <div className="flex items-center gap-2">
               <DialogTitle>
-                <Image src="/logo.png" alt="dionysus" width={40} height={40} />
+                <Image src="/logo.png" alt="ContextDrop" width={40} height={40} />
               </DialogTitle>
               <Button
                 disabled={saveAnswer.isPending || loading || !answer.trim()}
@@ -94,8 +94,27 @@ const AskQuestionCard = () => {
             </div>
           </DialogHeader>
 
+          {loading && !answer && !answerError && (
+            <div
+              role="status"
+              className="mb-3 flex min-h-32 flex-col items-center justify-center gap-3 rounded-md border border-sky-100 bg-sky-50 p-4 text-center text-gray-700"
+            >
+              <LoaderCircle
+                className="size-7 animate-spin text-sky-700"
+                aria-hidden="true"
+              />
+              <div>
+                <p className="font-medium">
+                  Searching your project and writing an answer...
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  This can take a little while for larger projects.
+                </p>
+              </div>
+            </div>
+          )}
           <div
-            className="scrollbar-hide !h-full max-h-[40vh] max-w-[90vw] overflow-scroll rounded-md bg-white p-2 text-black"
+            className={`scrollbar-hide !h-full max-h-[40vh] max-w-[90vw] overflow-scroll rounded-md bg-white p-2 text-black ${loading && !answer ? "hidden" : ""}`}
             aria-live="polite"
           >
             {answerError ? (
@@ -158,7 +177,7 @@ const AskQuestionCard = () => {
             />
             <div className="h-4"></div>
             <Button type="submit" disabled={loading}>
-              Ask Dionysus
+              Ask ContextDrop
             </Button>
           </form>
         </CardContent>

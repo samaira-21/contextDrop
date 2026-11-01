@@ -74,7 +74,7 @@ const CreatePage = () => {
             Link your GitHub Repository.
           </h1>
           <p className="text-sm text-muted-foreground">
-            Enter the URL of your GitHub repository to link the Dionysus.
+            Enter the URL of your GitHub repository to link the ContextDrop.
           </p>
         </div>
         <div className="h-4"></div>

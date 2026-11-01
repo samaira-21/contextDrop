@@ -55,7 +55,7 @@ const BillingPage = () => {
         key: order.keyId,
         amount: order.amount,
         currency: order.currency,
-        name: "Dionysus",
+        name: "ContextDrop",
         description: `${creditsToBuyAmount} credits`,
         order_id: order.orderId,
         handler: async (payment) => {

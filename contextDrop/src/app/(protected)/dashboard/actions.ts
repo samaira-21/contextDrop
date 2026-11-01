@@ -19,7 +19,7 @@ export async function askQuestion(question: string, projectId: string) {
         WHERE "summaryEmbedding" IS NOT NULL
         AND "projectId" = ${projectId} 
         ORDER BY similarity DESC NULLS LAST
-        LIMIT 10
+        LIMIT 6
         `) as { fileName: string; sourceCode: string; summary: string; similarity: number }[];
 
   console.info("Question retrieval completed", {
@@ -39,12 +39,13 @@ export async function askQuestion(question: string, projectId: string) {
   let context = "";
 
   for (const doc of result) {
-    context += `source: ${doc.fileName}\n code content: ${doc.sourceCode}\n summary of file: ${doc.summary}\n\n`;
+    context += `File: ${doc.fileName}\nSummary: ${doc.summary}\nRelevant source excerpt:\n${doc.sourceCode.slice(0, 4000)}\n\n`;
   }
 
   try {
     const { text: answer, finishReason, usage } = await generateText({
-        model: google("gemini-2.5-flash"),
+        model: google("gemini-3.8-flash"),
+        maxTokens: 700,
         prompt: `You are an ai assistant who answers questions about codebase. Your target audience is a technical intern who is trying to understand the codebase.
                     AI assistant is a brand new, powerful, human-like artificial intelligence.
                     The traits of AI include expert knowledge, helpfulness, cleverness, and articulateness.
@@ -63,7 +64,7 @@ export async function askQuestion(question: string, projectId: string) {
                     If the context does not provide the answer to the question, the AI assistant will say, "I am sorry, but I don't know the answer."
                     AI assistant will not apologize for previous responses, but instead will indicated new information was gained.
                     AI assistant will not invent anything that is not drawn directly from the context.
-                    Answer in markdown syntax, with code snippets if needed. Be as detailed as possible when answering, make sure there is new information in the answer.`,
+                    Answer in Markdown with useful code snippets. Keep the answer concise and grounded in the context.`,
       });
     if (!answer.trim()) {
       console.error("Gemini completed without answer text", {
